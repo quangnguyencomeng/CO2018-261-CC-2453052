@@ -25,28 +25,50 @@ static int slot[MAX_PRIO];
 #endif
 
 int queue_empty(void) {
+	int result;
+
+	pthread_mutex_lock(&queue_lock);
 #ifdef MLQ_SCHED
-	unsigned long prio;
+	int prio;
 	for (prio = 0; prio < MAX_PRIO; prio++)
-		if(!empty(&mlq_ready_queue[prio])) 
-			return -1;
+		if (!empty(&mlq_ready_queue[prio])) {
+			pthread_mutex_unlock(&queue_lock);
+			return 0;
+		}
+	result = 1;
+#else
+	result = empty(&ready_queue);
 #endif
-	return (empty(&ready_queue) && empty(&run_queue));
+	pthread_mutex_unlock(&queue_lock);
+	return result;
 }
 
 void init_scheduler(void) {
 #ifdef MLQ_SCHED
-    int i ;
+	int i;
 
-	for (i = 0; i < MAX_PRIO; i ++) {
+	for (i = 0; i < MAX_PRIO; i++) {
 		mlq_ready_queue[i].size = 0;
-		slot[i] = MAX_PRIO - i; 
+		slot[i] = MAX_PRIO - i;
 	}
 #endif
 	ready_queue.size = 0;
 	run_queue.size = 0;
 	running_list.size = 0;
 	pthread_mutex_init(&queue_lock, NULL);
+}
+
+void finish_scheduler(void) {
+	pthread_mutex_destroy(&queue_lock);
+}
+
+void remove_proc_from_running_list(struct pcb_t *proc) {
+	if (proc == NULL)
+		return;
+
+	pthread_mutex_lock(&queue_lock);
+	purgequeue(&running_list, proc);
+	pthread_mutex_unlock(&queue_lock);
 }
 
 #ifdef MLQ_SCHED
@@ -60,43 +82,94 @@ struct pcb_t * get_mlq_proc(void) {
 	struct pcb_t * proc = NULL;
 
 	pthread_mutex_lock(&queue_lock);
-	/*TODO: get a process from PRIORITY [ready_queue].
-	 *      It worth to protect by a mechanism.
-	 * */
+	for (int i = 0; i < MAX_PRIO; i++) {
+		if (slot[i] > 0 && !empty(&mlq_ready_queue[i])) {
+			proc = dequeue(&mlq_ready_queue[i]);
+			if (proc != NULL)
+				slot[i]--;
+			break;
+		}
+	}
+
+	if (proc == NULL) {
+		int has_ready_proc = 0;
+		for (int i = 0; i < MAX_PRIO; i++) {
+			if (!empty(&mlq_ready_queue[i])) {
+				has_ready_proc = 1;
+				break;
+			}
+		}
+
+		if (has_ready_proc) {
+			for (int i = 0; i < MAX_PRIO; i++)
+				slot[i] = MAX_PRIO - i;
+
+			for (int i = 0; i < MAX_PRIO; i++) {
+				if (!empty(&mlq_ready_queue[i])) {
+					proc = dequeue(&mlq_ready_queue[i]);
+					if (proc != NULL)
+						slot[i]--;
+					break;
+				}
+			}
+		}
+	}
 
 	if (proc != NULL)
 		enqueue(&running_list, proc);
-	return proc;	
+	pthread_mutex_unlock(&queue_lock);
+	return proc;
 }
 
 void put_mlq_proc(struct pcb_t * proc) {
+	if (proc == NULL)
+		return;
+	if (proc->prio >= MAX_PRIO) {
+		fprintf(stderr, "Cannot reschedule PID %u: invalid priority %u\n",
+			proc->pid, proc->prio);
+		return;
+	}
+	if (proc->krnl == NULL) {
+		fprintf(stderr, "Cannot reschedule PID %u: missing kernel context\n",
+			proc->pid);
+		return;
+	}
+
 	proc->krnl->ready_queue = &ready_queue;
 	proc->krnl->mlq_ready_queue = mlq_ready_queue;
 	proc->krnl->running_list = &running_list;
-
-	/* TODO: put running proc to running_list 
-	 *       It worth to protect by a mechanism.
-	 * 
-	 */
-
 	pthread_mutex_lock(&queue_lock);
+	if (mlq_ready_queue[proc->prio].size >= MAX_QUEUE_SIZE) {
+		fprintf(stderr, "Cannot reschedule PID %u: priority queue %u is full\n",
+			proc->pid, proc->prio);
+		pthread_mutex_unlock(&queue_lock);
+		return;
+	}
+	purgequeue(&running_list, proc);
 	enqueue(&mlq_ready_queue[proc->prio], proc);
 	pthread_mutex_unlock(&queue_lock);
 }
 
 void add_mlq_proc(struct pcb_t * proc) {
+	if (proc == NULL)
+		return;
+	if (proc->prio >= MAX_PRIO) {
+		fprintf(stderr, "Cannot schedule PID %u: invalid priority %u\n",
+			proc->pid, proc->prio);
+		return;
+	}
+	if (proc->krnl == NULL) {
+		fprintf(stderr, "Cannot schedule PID %u: missing kernel context\n",
+			proc->pid);
+		return;
+	}
+
 	proc->krnl->ready_queue = &ready_queue;
 	proc->krnl->mlq_ready_queue = mlq_ready_queue;
 	proc->krnl->running_list = &running_list;
-
-	/* TODO: put running proc to running_list
-	 *       It worth to protect by a mechanism.
-	 * 
-	 */
-       
 	pthread_mutex_lock(&queue_lock);
 	enqueue(&mlq_ready_queue[proc->prio], proc);
-	pthread_mutex_unlock(&queue_lock);	
+	pthread_mutex_unlock(&queue_lock);
 }
 
 struct pcb_t * get_proc(void) {
@@ -115,42 +188,42 @@ struct pcb_t * get_proc(void) {
 	struct pcb_t * proc = NULL;
 
 	pthread_mutex_lock(&queue_lock);
-	/*TODO: get a process from [ready_queue].
-	 *       It worth to protect by a mechanism.
-	 * 
-	 */
-
+	if (!empty(&ready_queue))
+		proc = dequeue(&ready_queue);
+	if (proc != NULL)
+		enqueue(&running_list, proc);
 	pthread_mutex_unlock(&queue_lock);
 
 	return proc;
 }
 
 void put_proc(struct pcb_t * proc) {
+	if (proc == NULL || proc->krnl == NULL)
+		return;
+
 	proc->krnl->ready_queue = &ready_queue;
 	proc->krnl->running_list = &running_list;
-
-	/* TODO: put running proc to running_list 
-	 *       It worth to protect by a mechanism.
-	 * 
-	 */
-
 	pthread_mutex_lock(&queue_lock);
-	enqueue(&run_queue, proc);
+	if (ready_queue.size >= MAX_QUEUE_SIZE) {
+		fprintf(stderr, "Cannot reschedule PID %u: ready queue is full\n",
+			proc->pid);
+		pthread_mutex_unlock(&queue_lock);
+		return;
+	}
+	purgequeue(&running_list, proc);
+	enqueue(&ready_queue, proc);
 	pthread_mutex_unlock(&queue_lock);
 }
 
 void add_proc(struct pcb_t * proc) {
+	if (proc == NULL || proc->krnl == NULL)
+		return;
+
 	proc->krnl->ready_queue = &ready_queue;
 	proc->krnl->running_list = &running_list;
-
-	/* TODO: put running proc to running_list 
-	 *       It worth to protect by a mechanism.
-	 * 
-	 */
-
 	pthread_mutex_lock(&queue_lock);
 	enqueue(&ready_queue, proc);
-	pthread_mutex_unlock(&queue_lock);	
+	pthread_mutex_unlock(&queue_lock);
 }
 #endif
 

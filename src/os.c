@@ -81,6 +81,7 @@ static void * cpu_routine(void * args) {
 			/* The porcess has finish it job */
 			printf("\tCPU %d: Processed %2d has finished\n",
 				id ,proc->pid);
+			remove_proc_from_running_list(proc);
 			free(proc);
 			proc = get_proc();
 			time_left = 0;
@@ -324,6 +325,7 @@ int main(int argc, char * argv[]) {
 
 	/* Stop timer */
 	stop_timer();
+	finish_scheduler();
 
 	return 0;
 

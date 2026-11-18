@@ -89,6 +89,12 @@ mem: $(MEM_OBJ)
 sched: $(SCHED_OBJ)
 	$(MAKE) $(LFLAGS) $(MEM_OBJ) -o sched $(LIB)
 
+test-sched: $(OBJ) $(OBJ)/sched_test
+	$(OBJ)/sched_test
+
+$(OBJ)/sched_test: tests/sched_test.c src/queue.c src/sched.c ${HEADER} $(OBJ)
+	$(CC) $(INC) -std=gnu11 -g -pthread tests/sched_test.c src/queue.c src/sched.c -o $@
+
 # Compile DMA testbench with C 
 # define DMA_MAIN=1 in src/dma_c_testbench.cpp to enable main()
 dma: $(OBJ) $(VDMA_OBJ_FAST) $(VDMA_OBJ_SLOW) $(OBJ)/dpi_rtl.o $(OBJ)/sysbus.o $(OBJ)/dma_c_testbench_dma.o
