@@ -1,4 +1,5 @@
 #ifndef MM_H
+#define MM_H
 
 #include "common.h"
 #include "bitops.h"
@@ -97,10 +98,10 @@ extern "C" {
 /* Extract SWAPTYPE */
 #define PAGING_PTE_SWPTYP(pte)  GETVAL(pte, PAGING_PTE_SWPTYP_MASK, PAGING_PTE_SWPTYP_LOBIT)
 
-/* Memory range operator */
-/* TODO implement the INCLUDE and OVERLAP checking mechanism */
-#define INCLUDE(x1,x2,y1,y2) (0)
-#define OVERLAP(x1,x2,y1,y2) (0)
+/* Half-open memory ranges: [start, end). */
+#define INCLUDE(x1,x2,y1,y2) (((x1) <= (y1)) && ((y1) <= (y2)) && ((y2) <= (x2)))
+#define OVERLAP(x1,x2,y1,y2) (((x1) < (x2)) && ((y1) < (y2)) && \
+                             ((x1) < (y2)) && ((y1) < (x2)))
 
 /* VM region prototypes */
 struct vm_rg_struct * init_vm_rg(addr_t rg_start, addr_t rg_end);
@@ -129,6 +130,7 @@ int get_pd_from_address(addr_t addr, addr_t* pgd, addr_t* p4d, addr_t* pud, addr
 int get_pd_from_pagenum(addr_t pgn, addr_t* pgd, addr_t* p4d, addr_t* pud, addr_t* pmd, addr_t* pt);
 int pte_set_fpn(struct mm_struct *mm, addr_t pgn, addr_t fpn,struct pcb_t *caller);
 int pte_set_swap(struct pcb_t *caller, addr_t pgn, int swptyp, addr_t swpoff);
+/* Returns zero for a page without a mapping. */
 addr_t pte_get_entry(struct mm_struct *mm, addr_t pgn, struct pcb_t *caller);
 int pte_set_entry(struct mm_struct *mm, addr_t pgn, uint64_t pte_val, struct pcb_t *caller);
 int init_pte(addr_t *pte,
@@ -143,6 +145,10 @@ int __free(struct pcb_t *caller, int vmaid, int rgid);
 int __read(struct pcb_t *caller, int vmaid, int rgid, addr_t offset, BYTE *data);
 int __write(struct pcb_t *caller, int vmaid, int rgid, addr_t offset, BYTE value);
 int init_mm(struct mm_struct *mm, struct pcb_t *caller);
+#ifdef MM64
+/* Release physical frames first; wait for CPU/syscall/DMA references to finish. */
+void destroy_mm(struct mm_struct *mm);
+#endif
 
 /* VM prototypes */
 int pgalloc(struct pcb_t *proc, uint32_t size, uint32_t reg_index);
