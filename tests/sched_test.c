@@ -38,7 +38,10 @@ static void test_mlq_and_running_list(void)
 	init_proc(&first, &kernel, 1, 0);
 	init_proc(&second, &kernel, 2, 0);
 
-	init_scheduler();
+	init_scheduler(&kernel);
+	assert(kernel.ready_queue != NULL);
+	assert(kernel.running_list != NULL);
+	assert(kernel.mlq_ready_queue != NULL);
 	assert(queue_empty());
 	add_proc(&first);
 	add_proc(&second);
@@ -57,6 +60,42 @@ static void test_mlq_and_running_list(void)
 	finish_scheduler();
 }
 
+static void test_full_queue_preserves_running_process(void)
+{
+	struct pcb_t procs[MAX_QUEUE_SIZE + 1];
+	struct krnl_t kernel;
+
+	memset(&kernel, 0, sizeof(kernel));
+	for (int i = 0; i <= MAX_QUEUE_SIZE; i++)
+		init_proc(&procs[i], &kernel, (uint32_t)(i + 1), 0);
+
+	init_scheduler(&kernel);
+	for (int i = 0; i < MAX_QUEUE_SIZE; i++)
+		add_proc(&procs[i]);
+
+	assert(get_proc() == &procs[0]);
+	add_proc(&procs[MAX_QUEUE_SIZE]);
+
+	assert(!put_proc(&procs[0]));
+	assert(kernel.running_list->size == 1);
+	assert(get_proc() == &procs[1]);
+	remove_proc_from_running_list(&procs[1]);
+	assert(put_proc(&procs[0]));
+	assert(kernel.running_list->size == 0);
+
+	for (int i = 2; i < MAX_QUEUE_SIZE; i++) {
+		assert(get_proc() == &procs[i]);
+		remove_proc_from_running_list(&procs[i]);
+	}
+	assert(get_proc() == &procs[MAX_QUEUE_SIZE]);
+	remove_proc_from_running_list(&procs[MAX_QUEUE_SIZE]);
+	assert(get_proc() == &procs[0]);
+	remove_proc_from_running_list(&procs[0]);
+	assert(kernel.running_list->size == 0);
+	assert(queue_empty());
+	finish_scheduler();
+}
+
 static void test_mlq_quota(void)
 {
 	struct pcb_t high, low;
@@ -66,7 +105,7 @@ static void test_mlq_quota(void)
 	init_proc(&high, &kernel, 1, 0);
 	init_proc(&low, &kernel, 2, MAX_PRIO - 1);
 
-	init_scheduler();
+	init_scheduler(&kernel);
 	add_proc(&high);
 	add_proc(&low);
 
@@ -89,6 +128,7 @@ int main(void)
 {
 	test_queue_fifo_and_purge();
 	test_mlq_and_running_list();
+	test_full_queue_preserves_running_process();
 	test_mlq_quota();
 	return 0;
 }

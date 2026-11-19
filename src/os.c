@@ -89,8 +89,11 @@ static void * cpu_routine(void * args) {
 			/* The process has done its job in current time slot */
 			printf("\tCPU %d: Put process %2d to run queue\n",
 				id, proc->pid);
-			put_proc(proc);
-			proc = get_proc();
+			if (put_proc(proc)) {
+				proc = get_proc();
+			} else {
+				time_left = time_slot;
+			}
 		}
 		
 		/* Recheck process status after loading new process */
@@ -301,7 +304,7 @@ int main(int argc, char * argv[]) {
 #endif
 
 	/* Init scheduler */
-	init_scheduler();
+	init_scheduler(&os);
 
 	/* Run CPU and loader */
 #ifdef MM_PAGING
