@@ -159,23 +159,28 @@ int put_mlq_proc(struct pcb_t * proc) {
 	return 1;
 }
 
-void add_mlq_proc(struct pcb_t * proc) {
+enum sched_add_result add_mlq_proc(struct pcb_t * proc) {
 	if (proc == NULL)
-		return;
+		return SCHED_ADD_INVALID;
 	if (proc->prio >= MAX_PRIO) {
 		fprintf(stderr, "Cannot schedule PID %u: invalid priority %u\n",
 			proc->pid, proc->prio);
-		return;
+		return SCHED_ADD_INVALID;
 	}
 	if (proc->krnl == NULL) {
 		fprintf(stderr, "Cannot schedule PID %u: missing kernel context\n",
 			proc->pid);
-		return;
+		return SCHED_ADD_INVALID;
 	}
 
 	pthread_mutex_lock(&queue_lock);
+	if (mlq_ready_queue[proc->prio].size >= MAX_QUEUE_SIZE) {
+		pthread_mutex_unlock(&queue_lock);
+		return SCHED_ADD_FULL;
+	}
 	enqueue(&mlq_ready_queue[proc->prio], proc);
 	pthread_mutex_unlock(&queue_lock);
+	return SCHED_ADD_OK;
 }
 
 struct pcb_t * get_proc(void) {
@@ -186,7 +191,7 @@ int put_proc(struct pcb_t * proc) {
 	return put_mlq_proc(proc);
 }
 
-void add_proc(struct pcb_t * proc) {
+enum sched_add_result add_proc(struct pcb_t * proc) {
 	return add_mlq_proc(proc);
 }
 #else
@@ -220,13 +225,18 @@ int put_proc(struct pcb_t * proc) {
 	return 1;
 }
 
-void add_proc(struct pcb_t * proc) {
+enum sched_add_result add_proc(struct pcb_t * proc) {
 	if (proc == NULL || proc->krnl == NULL)
-		return;
+		return SCHED_ADD_INVALID;
 
 	pthread_mutex_lock(&queue_lock);
+	if (ready_queue.size >= MAX_QUEUE_SIZE) {
+		pthread_mutex_unlock(&queue_lock);
+		return SCHED_ADD_FULL;
+	}
 	enqueue(&ready_queue, proc);
 	pthread_mutex_unlock(&queue_lock);
+	return SCHED_ADD_OK;
 }
 #endif
 

@@ -13,6 +13,12 @@ extern "C" {
 
 #define MAX_PRIO 140
 
+enum sched_add_result {
+	SCHED_ADD_INVALID = -1,
+	SCHED_ADD_FULL = 0,
+	SCHED_ADD_OK = 1
+};
+
 int queue_empty(void);
 
 void init_scheduler(struct krnl_t *kernel);
@@ -26,7 +32,7 @@ struct pcb_t * get_proc(void);
 int put_proc(struct pcb_t * proc);
 
 /* Add a new process to ready queue */
-void add_proc(struct pcb_t * proc);
+enum sched_add_result add_proc(struct pcb_t * proc);
 
 #ifdef __cplusplus
 }

@@ -181,9 +181,20 @@ static void * ld_routine(void * args) {
 	proc->mm = (struct mm_struct*)malloc(sizeof(struct mm_struct));
 	init_mm(proc->mm, proc);
 #endif
+		enum sched_add_result add_result;
+		do {
+			add_result = add_proc(proc);
+			if (add_result == SCHED_ADD_FULL)
+				next_slot(timer_id);
+		} while (add_result == SCHED_ADD_FULL);
+
+		if (add_result == SCHED_ADD_INVALID) {
+			fprintf(stderr, "Cannot enqueue loaded process PID %u\n", proc->pid);
+			exit(EXIT_FAILURE);
+		}
+
 		printf("\tLoaded a process at %s, PID: %d PRIO: %ld\n",
 			ld_processes.path[i], proc->pid, ld_processes.prio[i]);
-		add_proc(proc);
 		free(ld_processes.path[i]);
 		i++;
 		next_slot(timer_id);
