@@ -47,7 +47,7 @@ CXX_MAKE = $(CXX) -iquote include -I$(VERILATOR_ROOT)/include -I$(VERILATOR_ROOT
 
 # Object files needed by modules
 MEM_OBJ = $(addprefix $(OBJ)/, paging.o mem.o cpu.o loader.o)
-SYSCALL_OBJ = $(addprefix $(OBJ)/, syscall.o  sys_mem.o sys_listsyscall.o)
+SYSCALL_OBJ = $(addprefix $(OBJ)/, syscall.o sys_mem.o sys_listsyscall.o sys_killall.o sys_xxxhandler.o)
 OS_OBJ = $(addprefix $(OBJ)/, cpu.o mem.o loader.o queue.o os.o sched.o timer.o mm-vm.o mm64.o mm.o mm-memphy.o libstd.o libmem.o)
 OS_OBJ += $(SYSCALL_OBJ)
 
@@ -94,6 +94,12 @@ test-sched: $(OBJ) $(OBJ)/sched_test
 
 $(OBJ)/sched_test: tests/sched_test.c src/queue.c src/sched.c ${HEADER} $(OBJ)
 	$(CC) $(INC) -std=gnu11 -g -pthread tests/sched_test.c src/queue.c src/sched.c -o $@
+
+test-member3: $(OBJ) syscalltbl.lst $(OBJ)/member3_test
+	$(OBJ)/member3_test
+
+$(OBJ)/member3_test: tests/member3_test.c src/queue.c src/sched.c src/mm64.c src/mm-memphy.c src/mm-vm.c src/sys_mem.c src/sys_killall.c src/sys_xxxhandler.c src/sys_listsyscall.c src/syscall.c src/libstd.c ${HEADER} $(OBJ)
+	$(CC) $(INC) -I$(SRC) -std=gnu11 -Wall -Wextra -g -pthread tests/member3_test.c src/queue.c src/sched.c src/mm64.c src/mm-memphy.c src/mm-vm.c src/sys_mem.c src/sys_killall.c src/sys_xxxhandler.c src/sys_listsyscall.c src/syscall.c src/libstd.c -o $@
 
 # Compile DMA testbench with C 
 # define DMA_MAIN=1 in src/dma_c_testbench.cpp to enable main()
