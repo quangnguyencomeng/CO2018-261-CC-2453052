@@ -81,6 +81,7 @@ static void * cpu_routine(void * args) {
 			/* The porcess has finish it job */
 			printf("\tCPU %d: Processed %2d has finished\n",
 				id ,proc->pid);
+			remove_proc_from_running_list(proc);
 			free(proc);
 			proc = get_proc();
 			time_left = 0;
@@ -88,8 +89,11 @@ static void * cpu_routine(void * args) {
 			/* The process has done its job in current time slot */
 			printf("\tCPU %d: Put process %2d to run queue\n",
 				id, proc->pid);
-			put_proc(proc);
-			proc = get_proc();
+			if (put_proc(proc)) {
+				proc = get_proc();
+			} else {
+				time_left = time_slot;
+			}
 		}
 		
 		/* Recheck process status after loading new process */
@@ -177,9 +181,20 @@ static void * ld_routine(void * args) {
 	proc->mm = (struct mm_struct*)malloc(sizeof(struct mm_struct));
 	init_mm(proc->mm, proc);
 #endif
+		enum sched_add_result add_result;
+		do {
+			add_result = add_proc(proc);
+			if (add_result == SCHED_ADD_FULL)
+				next_slot(timer_id);
+		} while (add_result == SCHED_ADD_FULL);
+
+		if (add_result == SCHED_ADD_INVALID) {
+			fprintf(stderr, "Cannot enqueue loaded process PID %u\n", proc->pid);
+			exit(EXIT_FAILURE);
+		}
+
 		printf("\tLoaded a process at %s, PID: %d PRIO: %ld\n",
 			ld_processes.path[i], proc->pid, ld_processes.prio[i]);
-		add_proc(proc);
 		free(ld_processes.path[i]);
 		i++;
 		next_slot(timer_id);
@@ -300,7 +315,7 @@ int main(int argc, char * argv[]) {
 #endif
 
 	/* Init scheduler */
-	init_scheduler();
+	init_scheduler(&os);
 
 	/* Run CPU and loader */
 #ifdef MM_PAGING
@@ -324,6 +339,7 @@ int main(int argc, char * argv[]) {
 
 	/* Stop timer */
 	stop_timer();
+	finish_scheduler();
 
 	return 0;
 
