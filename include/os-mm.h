@@ -12,6 +12,7 @@
 #define OSMM_H
 
 #include <stdint.h>
+#include "os-cfg.h"
 
 #define MM_PAGING
 #define PAGING_MAX_MMSWP 4 /* max number of supported swapped space */
@@ -105,6 +106,8 @@ struct mm_struct {
    addr_t *pud;
    addr_t *pmd;
    addr_t *pt;
+   uint64_t page_table_bytes;
+   uint64_t pte_lookup_reads;
 #else
    uint32_t *pgd;
 #endif
