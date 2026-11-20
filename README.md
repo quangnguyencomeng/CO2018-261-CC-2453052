@@ -1,32 +1,29 @@
-# demacOprx - OS Simulation for CO2018
+# demacOprx
 
-Operating System Simulation with DMA (Verilator RTL) for HCMC University of Technology Course CO2018.
+Operating system simulator for HCMUT's CO2018 course. The DMA testbench uses Verilator RTL.
 
-## Build full OS simulation - The output file ./os
+## Run the OS simulator
+
+Run these commands from the repository root. Pass the name of a configuration in `input/` to `./os`.
 
 ```bash
-make os    # Build full OS simulation. The output file ./os
-```
-Run os simulation
-```bash
-# OS simulation
-./os [configuration_file]
+make os
+./os os_1_singleCPU_mlq_paging
 ```
 
-## Build only DMA module - The output file dma_testbench
+## Run the DMA testbench
 
 ```bash
-make dma 
-```
-Run DMA module:
-```bash
+make dma
 ./dma_testbench
 ./dma_testbench 0x1000 0x2000 1024
 ```
-## demacOprx environment
-Ubuntu Virtual Machine image for Intel-x86 and AARCH64 (required HCMUT.SSO system)
-[Course CO2018 Documentation](https://docs.google.com/document/d/1vCxl0sBotFjONqRJBAlnkTVYtlL1XZQrTyVl_dO0zxg/edit?usp=sharing "Course CO2018 Documentation - HCMC University of Technology")
+
+## Course resources
+
+- The course guide links to Ubuntu VM images for x86 and AArch64. HCMUT SSO is required. [CO2018 course guide](https://docs.google.com/document/d/1vCxl0sBotFjONqRJBAlnkTVYtlL1XZQrTyVl_dO0zxg/edit?usp=sharing)
+- [Member 4 memory operations and test status](docs/member4.md)
 
 ## License
 
-See [LICENSE](LICENSE) — educational use only for CO2018.
+Educational use for CO2018. See [LICENSE](LICENSE).
