@@ -43,12 +43,7 @@ int queue_empty(void) {
 	return result;
 }
 
-void init_scheduler(struct krnl_t *kernel) {
-	if (kernel == NULL) {
-		fprintf(stderr, "Cannot initialize scheduler: missing kernel context\n");
-		return;
-	}
-
+void init_scheduler(void) {
 #ifdef MLQ_SCHED
 	int i;
 
@@ -62,15 +57,18 @@ void init_scheduler(struct krnl_t *kernel) {
 	running_list.size = 0;
 	pthread_mutex_init(&queue_lock, NULL);
 
-	kernel->ready_queue = &ready_queue;
-	kernel->running_list = &running_list;
-#ifdef MLQ_SCHED
-	kernel->mlq_ready_queue = mlq_ready_queue;
-#endif
 }
 
 void finish_scheduler(void) {
 	pthread_mutex_destroy(&queue_lock);
+}
+
+void scheduler_lock_queues(void) {
+	pthread_mutex_lock(&queue_lock);
+}
+
+void scheduler_unlock_queues(void) {
+	pthread_mutex_unlock(&queue_lock);
 }
 
 void remove_proc_from_running_list(struct pcb_t *proc) {
@@ -80,6 +78,21 @@ void remove_proc_from_running_list(struct pcb_t *proc) {
 	pthread_mutex_lock(&queue_lock);
 	purgequeue(&running_list, proc);
 	pthread_mutex_unlock(&queue_lock);
+}
+
+struct pcb_t *find_proc_by_pid(uint32_t pid) {
+	struct pcb_t *proc = NULL;
+
+	scheduler_lock_queues();
+	for (int i = running_list.size - 1; i >= 0; i--) {
+		struct pcb_t *candidate = running_list.proc[i];
+		if (candidate != NULL && candidate->pid == pid) {
+			proc = candidate;
+			break;
+		}
+	}
+	scheduler_unlock_queues();
+	return proc;
 }
 
 #ifdef MLQ_SCHED
@@ -147,6 +160,9 @@ int put_mlq_proc(struct pcb_t * proc) {
 	}
 
 	pthread_mutex_lock(&queue_lock);
+	proc->krnl->ready_queue = &ready_queue;
+	proc->krnl->mlq_ready_queue = mlq_ready_queue;
+	proc->krnl->running_list = &running_list;
 	if (mlq_ready_queue[proc->prio].size >= MAX_QUEUE_SIZE) {
 		fprintf(stderr, "Cannot reschedule PID %u: priority queue %u is full\n",
 			proc->pid, proc->prio);
@@ -174,6 +190,9 @@ enum sched_add_result add_mlq_proc(struct pcb_t * proc) {
 	}
 
 	pthread_mutex_lock(&queue_lock);
+	proc->krnl->ready_queue = &ready_queue;
+	proc->krnl->mlq_ready_queue = mlq_ready_queue;
+	proc->krnl->running_list = &running_list;
 	if (mlq_ready_queue[proc->prio].size >= MAX_QUEUE_SIZE) {
 		pthread_mutex_unlock(&queue_lock);
 		return SCHED_ADD_FULL;
@@ -213,6 +232,8 @@ int put_proc(struct pcb_t * proc) {
 		return 0;
 
 	pthread_mutex_lock(&queue_lock);
+	proc->krnl->ready_queue = &ready_queue;
+	proc->krnl->running_list = &running_list;
 	if (ready_queue.size >= MAX_QUEUE_SIZE) {
 		fprintf(stderr, "Cannot reschedule PID %u: ready queue is full\n",
 			proc->pid);
@@ -230,6 +251,8 @@ enum sched_add_result add_proc(struct pcb_t * proc) {
 		return SCHED_ADD_INVALID;
 
 	pthread_mutex_lock(&queue_lock);
+	proc->krnl->ready_queue = &ready_queue;
+	proc->krnl->running_list = &running_list;
 	if (ready_queue.size >= MAX_QUEUE_SIZE) {
 		pthread_mutex_unlock(&queue_lock);
 		return SCHED_ADD_FULL;

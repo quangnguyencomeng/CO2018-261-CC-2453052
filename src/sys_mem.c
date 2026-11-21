@@ -11,7 +11,7 @@
 #include "os-mm.h"
 #include "syscall.h"
 #include "libmem.h"
-#include "queue.h"
+#include "sched.h"
 #include <stdlib.h>
 
 #ifdef MM64
@@ -19,36 +19,6 @@
 #else
 #include "mm.h"
 #endif
-
-/*
- * find_proc_by_pid - Resolve running process PCB in kernel space using PID.
- * User space never passes PCB pointers directly across the syscall boundary.
- */
-static struct pcb_t *find_proc_by_pid(struct krnl_t *krnl, uint32_t pid)
-{
-   if (krnl == NULL || krnl->running_list == NULL)
-      return NULL;
-
-   struct queue_t *rlist = krnl->running_list;
-   /*
-    * Scan backwards from the current size down to 0 so concurrent left-shifts
-    * caused by purgequeue() on other CPUs cannot skip our running caller PCB.
-    */
-   for (int attempt = 0; attempt < 2; attempt++)
-   {
-      int sz = rlist->size;
-      if (sz > MAX_QUEUE_SIZE)
-         sz = MAX_QUEUE_SIZE;
-      for (int i = sz - 1; i >= 0; i--)
-      {
-         struct pcb_t *p = rlist->proc[i];
-         if (p != NULL && p->pid == pid)
-            return p;
-      }
-   }
-
-   return NULL;
-}
 
 int __sys_memmap(struct krnl_t *krnl, uint32_t pid, struct sc_regs *regs)
 {
@@ -64,7 +34,7 @@ int __sys_memmap(struct krnl_t *krnl, uint32_t pid, struct sc_regs *regs)
     *            syscall implementations are in kernel space.
     *            User processes pass PID, and kernel resolves PCB via running_list.
     */
-   struct pcb_t *caller = find_proc_by_pid(krnl, pid);
+   struct pcb_t *caller = find_proc_by_pid(pid);
 
    switch (memop)
    {

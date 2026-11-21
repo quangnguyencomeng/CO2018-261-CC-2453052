@@ -7,10 +7,6 @@
 extern "C" {
 #endif
 
-#ifndef MLQ_SCHED
-#define MLQ_SCHED
-#endif
-
 #define MAX_PRIO 140
 
 enum sched_add_result {
@@ -21,9 +17,12 @@ enum sched_add_result {
 
 int queue_empty(void);
 
-void init_scheduler(struct krnl_t *kernel);
+void init_scheduler(void);
 void finish_scheduler(void);
 void remove_proc_from_running_list(struct pcb_t *proc);
+struct pcb_t *find_proc_by_pid(uint32_t pid);
+void scheduler_lock_queues(void);
+void scheduler_unlock_queues(void);
 
 /* Get the next process from ready queue */
 struct pcb_t * get_proc(void);

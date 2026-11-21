@@ -27,9 +27,19 @@ struct pcb_t *dequeue(struct queue_t *q)
         if (q == NULL || q->size <= 0 || q->size > MAX_QUEUE_SIZE)
                 return NULL;
 
-        struct pcb_t *proc = q->proc[0];
-        for (int i = 1; i < q->size; i++)
-                q->proc[i - 1] = q->proc[i];
+	int selected = 0;
+#ifndef MLQ_SCHED
+	/* Smaller numeric priority is higher priority; keep FIFO order on ties. */
+	for (int i = 1; i < q->size; i++) {
+		if (q->proc[i] != NULL &&
+		    (q->proc[selected] == NULL ||
+		     q->proc[i]->priority < q->proc[selected]->priority))
+			selected = i;
+	}
+#endif
+	struct pcb_t *proc = q->proc[selected];
+	for (int i = selected + 1; i < q->size; i++)
+		q->proc[i - 1] = q->proc[i];
         q->proc[--q->size] = NULL;
 
         return proc;
