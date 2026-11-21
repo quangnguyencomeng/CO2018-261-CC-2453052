@@ -94,7 +94,7 @@ foreach ($inputFile in $InputFiles) {
     $lines += "gantt"
     $lines += "  title Scheduler Gantt"
     $lines += "  dateFormat X"
-    $lines += "  axisFormat %s"
+    $lines += "  axisFormat %M:%S"
 
     $cpus = @($intervals.Keys | Sort-Object)
     foreach ($cpu in $cpus) {
@@ -102,7 +102,7 @@ foreach ($inputFile in $InputFiles) {
         foreach ($interval in $intervals[$cpu]) {
             $duration = $interval.End - $interval.Start
             if ($duration -gt 0) {
-                $lines += "  PID $($interval.Pid) :$($interval.Start),${duration}"
+                $lines += "  PID $($interval.Pid) :$($interval.Start),${duration}s"
             }
         }
     }

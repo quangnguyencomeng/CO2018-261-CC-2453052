@@ -21,6 +21,15 @@ slot[prio] = MAX_PRIO - prio
 The scheduler scans priority levels from 0 upward. If every ready queue has exhausted
 its quota, it resets all quotas and starts a new scheduling round.
 
+The quota is a count of dispatches, not a count of processes. With `MAX_PRIO = 140`,
+priority 0 receives 140 dispatches per round, priority 1 receives 139, and priority
+139 receives 1. Each dispatch runs for at most the configured `time_slot`. A ready
+queue whose quota reaches zero is skipped for the rest of that round. Once all
+non-empty ready queues have used their quotas, the scheduler restores every level's
+quota and starts another round. Consequently, a continuously ready lower-priority
+queue gets a turn after the finite quota of the ready queues above it is consumed;
+it is not indefinitely postponed by this quota policy.
+
 ## Queue Implementation
 
 `enqueue()` appends a PCB until `MAX_QUEUE_SIZE` entries are present.
@@ -110,10 +119,20 @@ The command reads `sched.output`, `sched_0.output`, `sched_1.output`, and
 
 ## Q3 - What distinguishes MLQ scheduling?
 
-MLQ separates processes into fixed priority queues. A process joins the queue for
-its configured priority and is dispatched according to priority order and per-level
-time-slice quotas. Higher priority levels receive larger quotas, but quota exhaustion
-allows lower levels to run instead of starving them indefinitely.
+This project uses a fixed-priority MLQ: each process stays in the priority queue
+assigned at load time, and dispatch scans queues from priority 0 upward. The per-level
+quota is `MAX_PRIO - prio`, so priority 0 gets 140 dispatches and priority 139 gets 1
+per round. Dispatching a process consumes one unit from that queue's quota. Exhausted
+queues are skipped; when all non-empty queues are exhausted, all quotas are reset.
+Since each round has finite quotas, every queue that remains ready receives service
+before the next reset, which bounds starvation caused by higher-priority queues.
+
+This differs from MLFQ (Multi-Level Feedback Queue), which changes a process's priority
+based on its observed behavior, such as CPU usage or interactive I/O. The scheduler
+here does not promote or demote processes based on runtime history; its queue assignment
+is fixed. MLFQ implementations often use periodic priority boosts or aging to prevent
+starvation, while this implementation relies on exhausting per-level quotas and
+resetting the round.
 
 A completed process leaves the system. A preempted process returns to its original
 priority queue. Scheduler and syscall queue operations use `queue_lock` so CPU,
