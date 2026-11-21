@@ -387,15 +387,14 @@ out:
  * @frm_lst   : frame list
  */
 
-/* Reserved frame nodes can be returned without another allocation. */
+/* Return reserved frames through MEMPHY so memphy_lock protects free_fp_list. */
 static void return_frames(struct memphy_struct *ram, struct framephy_struct *frames)
 {
   while (frames != NULL)
   {
     struct framephy_struct *next = frames->fp_next;
-    frames->owner = NULL;
-    frames->fp_next = ram->free_fp_list;
-    ram->free_fp_list = frames;
+    MEMPHY_put_freefp(ram, frames->fpn);
+    free(frames);
     frames = next;
   }
 }
@@ -414,7 +413,6 @@ addr_t alloc_pages_range(struct pcb_t *caller, int req_pgnum, struct framephy_st
   struct framephy_struct **tail = &head;
   addr_t result = 0;
 
-  pthread_mutex_lock(&page_table_lock);
   for (int page = 0; page < req_pgnum; ++page)
   {
     struct framephy_struct *node = calloc(1, sizeof(*node));
@@ -438,7 +436,6 @@ addr_t alloc_pages_range(struct pcb_t *caller, int req_pgnum, struct framephy_st
     return_frames(ram, head);
   else
     *frm_lst = head;
-  pthread_mutex_unlock(&page_table_lock);
   return result;
 }
 
@@ -457,9 +454,7 @@ addr_t vm_map_ram(struct pcb_t *caller, addr_t astart, addr_t aend,
   result = vmap_page_range(caller, mapstart, incpgnum, frames, ret_rg);
   if (result != 0)
   {
-    pthread_mutex_lock(&page_table_lock);
     return_frames(caller->krnl->mram, frames);
-    pthread_mutex_unlock(&page_table_lock);
     return result;
   }
 
@@ -481,23 +476,18 @@ addr_t vm_map_ram(struct pcb_t *caller, addr_t astart, addr_t aend,
 int __swap_cp_page(struct memphy_struct *mpsrc, addr_t srcfpn,
                    struct memphy_struct *mpdst, addr_t dstfpn)
 {
-  int cellidx;
-  addr_t addrsrc, addrdst;
-#ifdef MM64
-  for (cellidx = 0; cellidx < PAGING64_PAGESZ; cellidx++)
-  {
-    addrsrc = srcfpn * PAGING64_PAGESZ + cellidx;
-    addrdst = dstfpn * PAGING64_PAGESZ + cellidx;
-#else
-  for (cellidx = 0; cellidx < PAGING64_PAGESZ; cellidx++)
-  {
-    addrsrc = srcfpn * PAGING64_PAGESZ + cellidx;
-    addrdst = dstfpn * PAGING64_PAGESZ + cellidx;
-#endif
+  if (mpsrc == NULL || mpdst == NULL)
+    return -1;
 
-    BYTE data;
-    MEMPHY_read(mpsrc, addrsrc, &data);
-    MEMPHY_write(mpdst, addrdst, data);
+  for (int cellidx = 0; cellidx < PAGING64_PAGESZ; cellidx++)
+  {
+    addr_t addrsrc = srcfpn * PAGING64_PAGESZ + cellidx;
+    addr_t addrdst = dstfpn * PAGING64_PAGESZ + cellidx;
+    BYTE data = 0;
+
+    if (MEMPHY_read(mpsrc, addrsrc, &data) != 0 ||
+        MEMPHY_write(mpdst, addrdst, data) != 0)
+      return -1;
   }
 
   return 0;
@@ -567,7 +557,10 @@ void destroy_mm(struct mm_struct *mm)
 struct vm_rg_struct *init_vm_rg(addr_t rg_start, addr_t rg_end)
 {
   struct vm_rg_struct *rgnode = malloc(sizeof(struct vm_rg_struct));
+  if (rgnode == NULL)
+    return NULL;
 
+  rgnode->vmaid = 0;
   rgnode->rg_start = rg_start;
   rgnode->rg_end = rg_end;
   rgnode->rg_next = NULL;
@@ -577,6 +570,9 @@ struct vm_rg_struct *init_vm_rg(addr_t rg_start, addr_t rg_end)
 
 int enlist_vm_rg_node(struct vm_rg_struct **rglist, struct vm_rg_struct *rgnode)
 {
+  if (rglist == NULL || rgnode == NULL)
+    return -1;
+
   rgnode->rg_next = *rglist;
   *rglist = rgnode;
 
@@ -585,7 +581,12 @@ int enlist_vm_rg_node(struct vm_rg_struct **rglist, struct vm_rg_struct *rgnode)
 
 int enlist_pgn_node(struct pgn_t **plist, addr_t pgn)
 {
+  if (plist == NULL)
+    return -1;
+
   struct pgn_t *pnode = malloc(sizeof(struct pgn_t));
+  if (pnode == NULL)
+    return -1;
 
   pnode->pgn = pgn;
   pnode->pg_next = *plist;
@@ -705,8 +706,10 @@ int print_pgtbl(struct pcb_t *caller, addr_t start, addr_t end)
     print_page_table_range(mm->pgd, 0, 0, (start >> PAGING64_ADDR_PT_SHIFT) & pgn_mask,
                            (last_addr >> PAGING64_ADDR_PT_SHIFT) & pgn_mask, path);
 
+#ifdef MMDBG
   printf(" MMU pte_lookup_reads=%" PRIu64 " page_table_bytes=%" PRIu64 "\n",
          mm->pte_lookup_reads, mm->page_table_bytes);
+#endif
   pthread_mutex_unlock(&page_table_lock);
   return 0;
 }
