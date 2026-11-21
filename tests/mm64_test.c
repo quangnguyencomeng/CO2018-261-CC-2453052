@@ -30,6 +30,20 @@ int MEMPHY_get_freefp(struct memphy_struct *ram, addr_t *fpn)
     return 0;
 }
 
+int MEMPHY_put_freefp(struct memphy_struct *ram, addr_t fpn)
+{
+    if (ram == NULL)
+        return -1;
+    struct framephy_struct *node = malloc(sizeof(*node));
+    if (node == NULL)
+        return -1;
+    node->fpn = fpn;
+    node->owner = NULL;
+    node->fp_next = ram->free_fp_list;
+    ram->free_fp_list = node;
+    return 0;
+}
+
 int MEMPHY_read(struct memphy_struct *ram, addr_t address, BYTE *value)
 {
     (void)ram; (void)address; (void)value;
@@ -97,6 +111,10 @@ static void test_frame_allocation(void)
     assert(alloc_pages_range(&process, 1, &frames) == (addr_t)-3000);
     assert(alloc_pages_range(&process, -1, &frames) == (addr_t)-1);
     assert(alloc_pages_range(&process, 0, &frames) == 0 && frames == NULL);
+    assert(__swap_cp_page(NULL, 0, &ram, 0) == -1);
+    assert(__swap_cp_page(&ram, 0, &ram, 1) == -1);
+    assert(enlist_vm_rg_node(NULL, NULL) == -1);
+    assert(enlist_pgn_node(NULL, 0) == -1);
     destroy_mm(&mm);
 }
 
