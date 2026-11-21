@@ -387,16 +387,10 @@ out:
  * @frm_lst   : frame list
  */
 
-/* Return reserved frames through MEMPHY so memphy_lock protects free_fp_list. */
+/* Return caller-owned frame nodes under memphy_lock without extra allocation. */
 static void return_frames(struct memphy_struct *ram, struct framephy_struct *frames)
 {
-  while (frames != NULL)
-  {
-    struct framephy_struct *next = frames->fp_next;
-    MEMPHY_put_freefp(ram, frames->fpn);
-    free(frames);
-    frames = next;
-  }
+  MEMPHY_put_freefp_list(ram, frames);
 }
 
 addr_t alloc_pages_range(struct pcb_t *caller, int req_pgnum, struct framephy_struct **frm_lst)

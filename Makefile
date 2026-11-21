@@ -95,11 +95,15 @@ test-sched: $(OBJ) $(OBJ)/sched_test
 $(OBJ)/sched_test: tests/sched_test.c src/queue.c src/sched.c ${HEADER} $(OBJ)
 	$(CC) $(INC) -std=gnu11 -g -pthread tests/sched_test.c src/queue.c src/sched.c -o $@
 
-test-mm64: $(OBJ) $(OBJ)/mm64_test
+test-mm64: $(OBJ) $(OBJ)/mm64_test $(OBJ)/mm64_memphy_test
 	$(OBJ)/mm64_test
+	$(OBJ)/mm64_memphy_test
 
 $(OBJ)/mm64_test: tests/mm64_test.c src/mm64.c ${HEADER} $(OBJ)
 	$(CC) $(INC) -std=gnu11 -O1 -g -pthread tests/mm64_test.c src/mm64.c -Wl,--wrap=calloc -o $@
+
+$(OBJ)/mm64_memphy_test: tests/mm64_memphy_test.c src/mm64.c src/mm-memphy.c ${HEADER} $(OBJ)
+	$(CC) $(INC) -std=gnu11 -O1 -g -pthread tests/mm64_memphy_test.c src/mm64.c src/mm-memphy.c -Wl,--wrap=calloc -Wl,--wrap=malloc -o $@
 
 test-member3: $(OBJ) syscalltbl.lst $(OBJ)/member3_test
 	$(OBJ)/member3_test

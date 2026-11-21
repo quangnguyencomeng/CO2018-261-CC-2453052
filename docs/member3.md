@@ -102,5 +102,5 @@ gcc -std=gnu11 -Wall -Wextra -g -pthread -Iinclude -Isrc tests/member3_test.c sr
 
 ### Phase 3 Synchronization Notes
 
-- `mm-memphy.c` guards `MEMPHY_*` calls with `memphy_lock`, while Member 2's `return_frames()` and Member 4's `__kmalloc()` edit `ram->free_fp_list` directly under other locks. Unifying frame-list locking (e.g. a mutex on `struct memphy_struct` or routing returns through `MEMPHY_put_freefp()`) will remove that race.
+- `mm-memphy.c` guards `MEMPHY_*` calls with `memphy_lock` and exposes `MEMPHY_put_freefp_list()` so Member 2's `return_frames()` splices reserved frame nodes back under `memphy_lock` without extra allocation. Aligning Member 4's `__kmalloc()` with `memphy_lock` during Phase 3 will close the remaining direct `free_fp_list` access.
 - Scheduler queue synchronization for syscalls is resolved: `src/sched.c` exposes `find_proc_by_pid()`, `scheduler_lock_queues()`, and `scheduler_unlock_queues()`, which `src/sys_mem.c` and `src/sys_killall.c` now use under `queue_lock`.
