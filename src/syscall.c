@@ -28,6 +28,9 @@ const int syscall_table_size = sizeof(sys_call_table)/sizeof(char*);
 
 int __sys_ni_syscall(struct krnl_t *krnl, struct sc_regs *regs)
 {
+   (void)krnl;
+   (void)regs;
+
    /*
     * DUMMY systemcall
     */
