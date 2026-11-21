@@ -195,7 +195,7 @@ static void test_syscalls_with_member1_and_member2(void)
    struct krnl_t krnl = {0};
    krnl.mram = &mram;
    krnl.active_mswp = &mswp;
-   init_scheduler(&krnl);
+   init_scheduler();
 
    struct code_seg_t code1 = {.text = NULL, .size = 5};
    struct code_seg_t code2 = {.text = NULL, .size = 10};
