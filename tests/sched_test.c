@@ -38,16 +38,15 @@ static void test_mlq_and_running_list(void)
 	init_proc(&first, &kernel, 1, 0);
 	init_proc(&second, &kernel, 2, 0);
 
-	init_scheduler(&kernel);
-	assert(kernel.ready_queue != NULL);
-	assert(kernel.running_list != NULL);
-	assert(kernel.mlq_ready_queue != NULL);
+	init_scheduler();
 	assert(queue_empty());
 	assert(add_proc(&first) == SCHED_ADD_OK);
 	assert(add_proc(&second) == SCHED_ADD_OK);
 
 	assert(get_proc() == &first);
 	assert(kernel.running_list->size == 1);
+	assert(find_proc_by_pid(first.pid) == &first);
+	assert(find_proc_by_pid(999) == NULL);
 	put_proc(&first);
 	assert(kernel.running_list->size == 0);
 	assert(get_proc() == &second);
@@ -69,7 +68,7 @@ static void test_full_queue_preserves_running_process(void)
 	for (int i = 0; i <= MAX_QUEUE_SIZE; i++)
 		init_proc(&procs[i], &kernel, (uint32_t)(i + 1), 0);
 
-	init_scheduler(&kernel);
+	init_scheduler();
 	for (int i = 0; i < MAX_QUEUE_SIZE; i++)
 		add_proc(&procs[i]);
 
@@ -105,7 +104,7 @@ static void test_add_process_retries_after_full_queue(void)
 	for (int i = 0; i <= MAX_QUEUE_SIZE; i++)
 		init_proc(&procs[i], &kernel, (uint32_t)(i + 1), 0);
 
-	init_scheduler(&kernel);
+	init_scheduler();
 	for (int i = 0; i < MAX_QUEUE_SIZE; i++)
 		assert(add_proc(&procs[i]) == SCHED_ADD_OK);
 	assert(add_proc(&procs[MAX_QUEUE_SIZE]) == SCHED_ADD_FULL);
@@ -133,7 +132,7 @@ static void test_mlq_quota(void)
 	init_proc(&high, &kernel, 1, 0);
 	init_proc(&low, &kernel, 2, MAX_PRIO - 1);
 
-	init_scheduler(&kernel);
+	init_scheduler();
 	assert(add_proc(&high) == SCHED_ADD_OK);
 	assert(add_proc(&low) == SCHED_ADD_OK);
 

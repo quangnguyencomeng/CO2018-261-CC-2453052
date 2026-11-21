@@ -23,13 +23,14 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdatomic.h>
 
 #include "sysbus.h"
 #include "dpi_rtl.h"
 
 static int time_slot;
 static int num_cpus;
-static int done = 0;
+static atomic_int done = 0;
 static struct krnl_t os;
 
 #ifdef MM_PAGING
@@ -74,9 +75,13 @@ static void * cpu_routine(void * args) {
 		 	* ready queue */
 			proc = get_proc();
 			if (proc == NULL) {
-                           next_slot(timer_id);
-                           continue; /* First load failed. skip dummy load */
-                        }
+				if (done) {
+					printf("\tCPU %d stopped\n", id);
+					break;
+				}
+				next_slot(timer_id);
+				continue;
+			}
 		}else if (proc->pc == proc->code->size) {
 			/* The porcess has finish it job */
 			printf("\tCPU %d: Processed %2d has finished\n",
@@ -92,6 +97,7 @@ static void * cpu_routine(void * args) {
 			if (put_proc(proc)) {
 				proc = get_proc();
 			} else {
+				/* Keep ownership of proc and retry after another time slice. */
 				time_left = time_slot;
 			}
 		}
@@ -181,6 +187,8 @@ static void * ld_routine(void * args) {
 	proc->mm = (struct mm_struct*)malloc(sizeof(struct mm_struct));
 	init_mm(proc->mm, proc);
 #endif
+		printf("\tLoaded a process at %s, PID: %d PRIO: %ld\n",
+			ld_processes.path[i], proc->pid, ld_processes.prio[i]);
 		enum sched_add_result add_result;
 		do {
 			add_result = add_proc(proc);
@@ -192,9 +200,6 @@ static void * ld_routine(void * args) {
 			fprintf(stderr, "Cannot enqueue loaded process PID %u\n", proc->pid);
 			exit(EXIT_FAILURE);
 		}
-
-		printf("\tLoaded a process at %s, PID: %d PRIO: %ld\n",
-			ld_processes.path[i], proc->pid, ld_processes.prio[i]);
 		free(ld_processes.path[i]);
 		i++;
 		next_slot(timer_id);
@@ -315,7 +320,7 @@ int main(int argc, char * argv[]) {
 #endif
 
 	/* Init scheduler */
-	init_scheduler(&os);
+	init_scheduler();
 
 	/* Run CPU and loader */
 #ifdef MM_PAGING
