@@ -30,17 +30,17 @@ int MEMPHY_get_freefp(struct memphy_struct *ram, addr_t *fpn)
     return 0;
 }
 
-int MEMPHY_put_freefp(struct memphy_struct *ram, addr_t fpn)
+int MEMPHY_put_freefp_list(struct memphy_struct *ram, struct framephy_struct *frames)
 {
     if (ram == NULL)
         return -1;
-    struct framephy_struct *node = malloc(sizeof(*node));
-    if (node == NULL)
-        return -1;
-    node->fpn = fpn;
-    node->owner = NULL;
-    node->fp_next = ram->free_fp_list;
-    ram->free_fp_list = node;
+    while (frames != NULL) {
+        struct framephy_struct *next = frames->fp_next;
+        frames->owner = NULL;
+        frames->fp_next = ram->free_fp_list;
+        ram->free_fp_list = frames;
+        frames = next;
+    }
     return 0;
 }
 

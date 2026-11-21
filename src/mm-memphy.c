@@ -276,6 +276,33 @@ int MEMPHY_put_freefp(struct memphy_struct *mp, addr_t fpn)
 }
 
 /*
+ *  MEMPHY_put_freefp_list - return caller-owned frame nodes directly to
+ *  free_fp_list under memphy_lock without allocating memory.
+ *  @mp: memphy struct
+ *  @frames: linked list of framephy_struct nodes to return (ownership transferred)
+ */
+int MEMPHY_put_freefp_list(struct memphy_struct *mp, struct framephy_struct *frames)
+{
+   if (mp == NULL)
+      return -1;
+   if (frames == NULL)
+      return 0;
+
+   pthread_mutex_lock(&memphy_lock);
+   while (frames != NULL)
+   {
+      struct framephy_struct *next = frames->fp_next;
+      frames->owner = NULL;
+      frames->fp_next = mp->free_fp_list;
+      mp->free_fp_list = frames;
+      frames = next;
+   }
+   pthread_mutex_unlock(&memphy_lock);
+
+   return 0;
+}
+
+/*
  *  init_memphy - Initialize MEMPHY struct
  */
 int init_memphy(struct memphy_struct *mp, addr_t max_size, int randomflg)

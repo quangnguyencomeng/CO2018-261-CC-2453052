@@ -45,14 +45,14 @@ flowchart LR
 
 ## 2. Integration Interfaces and Synchronization
 
-- **`alloc_pages_range()`:** Allocates `req_pgnum` RAM frames through `MEMPHY_get_freefp()`. Returns `0` on success, `(addr_t)-3000` when physical RAM runs out, or `(addr_t)-1` on invalid arguments / allocation failure. On failure, already-reserved frames are returned via `MEMPHY_put_freefp()` (synchronized under `memphy_lock`) and `*frm_lst` is set to `NULL`.
+- **`alloc_pages_range()`:** Allocates `req_pgnum` RAM frames through `MEMPHY_get_freefp()`. Returns `0` on success, `(addr_t)-3000` when physical RAM runs out, or `(addr_t)-1` on invalid arguments / allocation failure. On failure, already-reserved frame nodes are spliced back via `MEMPHY_put_freefp_list()` under `memphy_lock` without allocating memory, and `*frm_lst` is set to `NULL`.
 - **`vmap_page_range()`:** Maps a page-aligned canonical range using frames reserved by the caller and pushes mapped `pgn` entries onto `mm->fifo_pgn`. If any step fails (existing mapping, non-canonical range, or OOM allocating intermediate tables), all newly created tables are freed and rolled back with no partial PTE or FIFO commit.
-- **`vm_map_ram()`:** Combines `alloc_pages_range()` and `vmap_page_range()`, returning reserved frames via `MEMPHY_put_freefp()` on mapping failure and freeing temporary frame list nodes on success.
+- **`vm_map_ram()`:** Combines `alloc_pages_range()` and `vmap_page_range()`, returning reserved frame nodes via `MEMPHY_put_freefp_list()` (allocation-free) on mapping failure and freeing temporary frame list nodes on success.
 - **`vmap_pgd_memset()`:** Demand-allocates zeroed PTE slots for an unmapped range (`SYSMEM_MAP_OP`) while rejecting ranges that already contain active mappings and rolling back newly allocated tables on error.
 - **`__swap_cp_page()`:** Copies `4096` bytes between physical devices, checking for `NULL` devices and propagating any `MEMPHY_read()` / `MEMPHY_write()` error (`-1`).
 - **`destroy_mm()`:** Frees the 5-level page table tree, VMA list, free-region nodes, FIFO list, and `kcpooltbl`, then zeroes `mm` so repeated calls are safe. Callers must reclaim physical RAM/swap frames beforehand (as in `free_pcb_memph()`).
 - **`print_pgtbl()`:** Walks populated directory paths in `[start, end)` (including `end == UINT64_MAX`) and prints `PDG=... P4D=... PUD=... PMD=...PT=...`. Printing the `MMU pte_lookup_reads=... page_table_bytes=...` summary line is gated by `#ifdef MMDBG` so default simulator output matches the reference format cleanly.
-- **Locking:** `page_table_lock` guards page-table walks, updates, dumps, and `destroy_mm()`, while `alloc_pages_range()` / `return_frames()` release `page_table_lock` and route all `free_fp_list` operations through `MEMPHY_get_freefp()` / `MEMPHY_put_freefp()` (`memphy_lock`) to avoid cross-module data races.
+- **Locking:** `page_table_lock` guards page-table walks, updates, dumps, and `destroy_mm()`, while `alloc_pages_range()` / `return_frames()` release `page_table_lock` and route all `free_fp_list` operations through `MEMPHY_get_freefp()` / `MEMPHY_put_freefp_list()` (`memphy_lock`) so frame rollback is both race-free and allocation-free.
 
 ---
 
@@ -125,6 +125,8 @@ On Windows (MinGW GCC):
 ```powershell
 gcc -std=gnu11 -Wall -Wextra -O1 -g -pthread -Iinclude tests/mm64_test.c src/mm64.c "-Wl,--wrap=calloc" -o obj/mm64_test.exe
 .\obj\mm64_test.exe
+gcc -std=gnu11 -Wall -Wextra -O1 -g -pthread -Iinclude tests/mm64_memphy_test.c src/mm64.c src/mm-memphy.c "-Wl,--wrap=calloc" "-Wl,--wrap=malloc" -o obj/mm64_memphy_test.exe
+.\obj\mm64_memphy_test.exe
 ```
 
 To enable the MMU lookup/storage summary line in `print_pgtbl()`, compile with `-DMMDBG=1` (or uncomment `#define MMDBG 1` in `include/os-cfg.h`).
@@ -132,6 +134,6 @@ To enable the MMU lookup/storage summary line in `print_pgtbl()`, compile with `
 ### Results
 
 - `tests/mm64_test.c` passes all checks: `INCLUDE`/`OVERLAP`, 12-bit offset masks, 5-level index extraction, canonical address rejection, per-`mm` isolation, frame `0`, RAM/swap PTE transitions, `vmap_pgd_memset`, `calloc`-failure rollback, `__swap_cp_page` error handling, NULL helper guards, 2-thread concurrent access, and idempotent `destroy_mm()`.
+- `tests/mm64_memphy_test.c` links real `src/mm64.c` with real `src/mm-memphy.c` under both `--wrap=calloc` and `--wrap=malloc` fault injection, verifying zero lost/duplicate frames, exact FPN-set preservation, no partial PTE/FIFO commits for `alloc_pages_range()` and `vm_map_ram()` (page-table OOM, FIFO-node OOM, and overlap-mapping failure), plus 4-thread concurrent rollback stress.
 - `tests/member3_test.c` passes 4/4 suites linking `src/mm64.c` with real `src/mm-memphy.c`, `src/mm-vm.c`, and `src/sched.c`.
-- A 4-thread concurrent OOM rollback stress test (`alloc_pages_range` requesting 3 frames from a 2-frame RAM via real `src/mm-memphy.c`) preserved 2/2 frames with zero races or leaks.
 - All 9 OS integration workloads (`os_0_mlq_paging`, `os_1_singleCPU_mlq_paging`, `os_1_mlq_paging`, `os_1_mlq_paging_small_1K`, `os_1_mlq_paging_small_4K`, `os_syscall_list`, `os_syscall`, `os_sc`, `os_2_singleCPU_mlq_paging`) passed with exit code `0` in both default and `-DMMDBG=1` builds.
